@@ -29,12 +29,18 @@ public class IndexHeader {
     private static int hashSlotcountIndex = 32;
     private static int indexCountIndex = 36;
     private final ByteBuffer byteBuffer;
+    //该索引 文件中包含消息 的最小存储时间
     private AtomicLong beginTimestamp = new AtomicLong(0);
+    //该索引文件中包含消息的最大存储时间
     private AtomicLong endTimestamp = new AtomicLong(0);
+    //该索引文件 中包含消息的最小物理偏移量（ c ommitlog 文件偏移量）
     private AtomicLong beginPhyOffset = new AtomicLong(0);
+    //该索引 文件中包含消息 的最大物理偏移量（ commitlog 文件偏移量） 。
     private AtomicLong endPhyOffset = new AtomicLong(0);
+    //hashslot 个数，并不是 hash 槽使用的个数
     private AtomicInteger hashSlotCount = new AtomicInteger(0);
 
+    // Index 条目列表当前已使用的个数， Index 条目在 Index 条目列表中按顺序存储
     private AtomicInteger indexCount = new AtomicInteger(1);
 
     public IndexHeader(final ByteBuffer byteBuffer) {

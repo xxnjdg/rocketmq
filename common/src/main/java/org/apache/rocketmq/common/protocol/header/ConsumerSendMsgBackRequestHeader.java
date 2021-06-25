@@ -24,15 +24,21 @@ import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
 public class ConsumerSendMsgBackRequestHeader implements CommandCustomHeader {
     @CFNotNull
+    //消息物理起始偏移量
     private Long offset;
     @CFNotNull
+    //消费者组
     private String group;
     @CFNotNull
+    //延迟级别
     private Integer delayLevel;
+    //消息id
     private String originMsgId;
+    //topic
     private String originTopic;
     @CFNullable
     private boolean unitMode = false;
+    //最大重试次数，默认16
     private Integer maxReconsumeTimes;
 
     @Override

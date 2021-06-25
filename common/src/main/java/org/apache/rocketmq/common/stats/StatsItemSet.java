@@ -27,6 +27,7 @@ import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.logging.InternalLogger;
 
 public class StatsItemSet {
+    //key = topic
     private final ConcurrentMap<String/* key */, StatsItem> statsItemTable =
         new ConcurrentHashMap<String, StatsItem>(128);
 

@@ -119,6 +119,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             ConsumeMessageContext context = buildConsumeMessageContext(namespace, requestHeader, request);
             this.executeConsumeMessageHookAfter(context);
         }
+        //获取消 费组的订阅配置信息， 如果配置信息为空返回配置组信息不存在错误 ，
+        //如果重试队列数量小于 1 ，则直接返回成功 ， 说明该消费组不支持重试
         SubscriptionGroupConfig subscriptionGroupConfig =
             this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(requestHeader.getGroup());
         if (null == subscriptionGroupConfig) {
@@ -139,6 +141,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             return CompletableFuture.completedFuture(response);
         }
 
+        //创建重试主题，重试主题名称 ： %RETRY%＋消费组名称，并从重试队列中随
+        //机选择一个队列 ，并构建 TopicConfig 主题配置信息
         String newTopic = MixAll.getRetryTopic(requestHeader.getGroup());
         int queueIdInt = Math.abs(this.random.nextInt() % 99999999) % subscriptionGroupConfig.getRetryQueueNums();
         int topicSysFlag = 0;
@@ -161,6 +165,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             response.setRemark(String.format("the topic[%s] sending message is forbidden", newTopic));
             return CompletableFuture.completedFuture(response);
         }
+        //根据消息物理偏移量从 commitlog 文件中 获取消息， 同时将消息的主题存入属性中
         MessageExt msgExt = this.brokerController.getMessageStore().lookMessageByOffset(requestHeader.getOffset());
         if (null == msgExt) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
@@ -174,6 +179,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
         msgExt.setWaitStoreMsgOK(false);
 
+        //设置消息重试次数， 如果消息 已 重试次数超过 maxReconsumeTimes ，再次改变
+        //newTopic 主题为 DLQ （”%DLQ%”），该主题的权限为只写，说明消息一旦进入到 DLQ 队
+        //列中， RocketMQ 将不负责再次调度进行消费了， 需要人工干预 。
         int delayLevel = requestHeader.getDelayLevel();
 
         int maxReconsumeTimes = subscriptionGroupConfig.getRetryMaxTimes();
@@ -201,6 +209,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             msgExt.setDelayTimeLevel(delayLevel);
         }
 
+        //根据原先的消息创建一个新的消息对象，重试消息会拥有自己的唯一消息 ID
+        //( msgld ）并存人到 commitlog 文件中，并不会去更新原先消息 ， 而是会将原先的主题、 消息
+        //ID 存入消息的属性中 ， 主题名称为重试主题 ， 其他属性与原先消息保持相同
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(newTopic);
         msgInner.setBody(msgExt.getBody());
@@ -249,6 +260,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     private CompletableFuture<RemotingCommand> asyncSendMessage(ChannelHandlerContext ctx, RemotingCommand request,
                                                                 SendMessageContext mqtraceContext,
                                                                 SendMessageRequestHeader requestHeader) {
+        //做了参数检查，autoCreateTopicEnable选项开启时，如果topic不存在则创建
         final RemotingCommand response = preSend(ctx, request, requestHeader);
         final SendMessageResponseHeader responseHeader = (SendMessageResponseHeader)response.readCustomHeader();
 
@@ -256,6 +268,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             return CompletableFuture.completedFuture(response);
         }
 
+        //获取 body
         final byte[] body = request.getBody();
 
         int queueIdInt = requestHeader.getQueueId();
@@ -265,6 +278,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             queueIdInt = randomQueueId(topicConfig.getWriteQueueNums());
         }
 
+        //开始构造 MessageExtBrokerInner
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
@@ -288,6 +302,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         CompletableFuture<PutMessageResult> putMessageResult = null;
         Map<String, String> origProps = MessageDecoder.string2messageProperties(requestHeader.getProperties());
         String transFlag = origProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
+        //消息存储
         if (transFlag != null && Boolean.parseBoolean(transFlag)) {
             if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {
                 response.setCode(ResponseCode.NO_PERMISSION);

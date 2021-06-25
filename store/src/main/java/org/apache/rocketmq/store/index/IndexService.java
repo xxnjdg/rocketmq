@@ -40,8 +40,11 @@ public class IndexService {
      */
     private static final int MAX_TRY_IDX_CREATE = 3;
     private final DefaultMessageStore defaultMessageStore;
+    //5000000
     private final int hashSlotNum;
+    //5000000 * 4
     private final int indexNum;
+    //文件存放目录 storePathRootDir/index
     private final String storePath;
     private final ArrayList<IndexFile> indexFileList = new ArrayList<IndexFile>();
     private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
@@ -65,6 +68,8 @@ public class IndexService {
                     IndexFile f = new IndexFile(file.getPath(), this.hashSlotNum, this.indexNum, 0, 0);
                     f.load();
 
+                    //如果上次异常退出 ，而且索引文件上次刷盘时间小于该索引文
+                    //件最大的消息时间戳该文件将立 即销毁
                     if (!lastExitOK) {
                         if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint()
                             .getIndexMsgTimestamp()) {
@@ -199,6 +204,8 @@ public class IndexService {
     }
 
     public void buildIndex(DispatchRequest req) {
+        //获取或创建 IndexFile 文件并获取所有文件最大的物理偏移量 。 如果该消息的物
+        //理偏移量小于索引文件中的物理偏移，则说明是重复数据，忽略本次索引构建
         IndexFile indexFile = retryGetAndCreateIndexFile();
         if (indexFile != null) {
             long endPhyOffset = indexFile.getEndPhyOffset();
@@ -219,6 +226,7 @@ public class IndexService {
                     return;
             }
 
+            //如果消息的唯一键不为 空 ，则添加到 Hash 索引中，以便加速根据唯一键检索 消息 。
             if (req.getUniqKey() != null) {
                 indexFile = putKey(indexFile, msg, buildKey(topic, req.getUniqKey()));
                 if (indexFile == null) {
@@ -227,6 +235,7 @@ public class IndexService {
                 }
             }
 
+            //构建索引键，RocketMQ 支持为 同一个消息建立多个索引，多个索引 键空格分开
             if (keys != null && keys.length() > 0) {
                 String[] keyset = keys.split(MessageConst.KEY_SEPARATOR);
                 for (int i = 0; i < keyset.length; i++) {
@@ -313,6 +322,7 @@ public class IndexService {
 
         if (indexFile == null) {
             try {
+                //以当前时间文件名
                 String fileName =
                     this.storePath + File.separator
                         + UtilAll.timeMillisToHumanString(System.currentTimeMillis());
@@ -357,6 +367,7 @@ public class IndexService {
         f.flush();
 
         if (indexMsgTimestamp > 0) {
+            //等写满文件才会刷新
             this.defaultMessageStore.getStoreCheckpoint().setIndexMsgTimestamp(indexMsgTimestamp);
             this.defaultMessageStore.getStoreCheckpoint().flush();
         }

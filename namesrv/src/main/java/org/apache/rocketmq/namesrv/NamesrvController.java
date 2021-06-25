@@ -42,17 +42,24 @@ import org.apache.rocketmq.srvutil.FileWatchService;
 public class NamesrvController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+    //nameSrv的配置
     private final NamesrvConfig namesrvConfig;
 
+    //netty的配置
     private final NettyServerConfig nettyServerConfig;
 
+    //执行单线程的任务调度，自定义编程名称
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "NSScheduledThread"));
+    //kv的配置管理
     private final KVConfigManager kvConfigManager;
+    //路由管理器，有broker的ip和队列信息，producer发送的queue信息，consumer的pull的queue信息
     private final RouteInfoManager routeInfoManager;
 
+    //namesrv的netty的服务端实现
     private RemotingServer remotingServer;
 
+    //处理接受到请求事件的回调监听服务，主要处理netty的事件
     private BrokerHousekeepingService brokerHousekeepingService;
 
     private ExecutorService remotingExecutor;
@@ -63,9 +70,13 @@ public class NamesrvController {
     public NamesrvController(NamesrvConfig namesrvConfig, NettyServerConfig nettyServerConfig) {
         this.namesrvConfig = namesrvConfig;
         this.nettyServerConfig = nettyServerConfig;
+        //构造kv配置的管理
         this.kvConfigManager = new KVConfigManager(this);
+        //构造路由信息管理
         this.routeInfoManager = new RouteInfoManager();
+        //构造网络连接事件管理
         this.brokerHousekeepingService = new BrokerHousekeepingService(this);
+        //配置
         this.configuration = new Configuration(
             log,
             this.namesrvConfig, this.nettyServerConfig
@@ -75,15 +86,20 @@ public class NamesrvController {
 
     public boolean initialize() {
 
+        //加载kv配置信息的当前服务内存中
         this.kvConfigManager.load();
 
+        //本地的namesrv的netty服务
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
+        //处理远程服务请求的线程池
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
+        //注册可以处理的业务处理器，默认的处理
         this.registerProcessor();
 
+        //定时扫描不可用的broker，同时删除不可用的broker，同时打印相关日志
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -92,6 +108,7 @@ public class NamesrvController {
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        //定时将kv的配置信息输出到info日志中
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -144,10 +161,12 @@ public class NamesrvController {
     private void registerProcessor() {
         if (namesrvConfig.isClusterTest()) {
 
+            //集群测试配置的处理器
             this.remotingServer.registerDefaultProcessor(new ClusterTestRequestProcessor(this, namesrvConfig.getProductEnvName()),
                 this.remotingExecutor);
         } else {
 
+            //正常模式的处理器
             this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.remotingExecutor);
         }
     }

@@ -112,6 +112,7 @@ public class BrokerConfig {
     private int maxDelayTime = 40;
 
     private String regionId = MixAll.DEFAULT_TRACE_REGION_ID;
+    //注册 Broker 超时时间，默认为6秒
     private int registerBrokerTimeoutMills = 6000;
 
     private boolean slaveReadEnable = false;

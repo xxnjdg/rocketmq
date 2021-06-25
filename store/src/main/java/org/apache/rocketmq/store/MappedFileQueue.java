@@ -35,17 +35,27 @@ public class MappedFileQueue {
 
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
+    //defaultMessageStore.getMessageStoreConfig().getStorePathCommitLog() storePathCommitLog
+    //存储目录
     private final String storePath;
 
+    //单个文件的存储大小
     private final int mappedFileSize;
 
+    //MappedFile 文件集合
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
+    //创建 MappedFile 服务类
     private final AllocateMappedFileService allocateMappedFileService;
 
+    //当前刷盘指针， 表示该指针之前的所有数据全部持久化到磁盘
+    //已经刷盘的物理偏移
     private long flushedWhere = 0;
+    //当前数据提交指针，内存中 ByteBuffer 当前的写指针，该值大于等于 flushedWhere
     private long committedWhere = 0;
 
+    //最后刷新时间，storeTimestamp 由 mappedFile.getStoreTimestamp() 更新过来
+    //mappedFile.getStoreTimestamp() 会比较新，这个会比较旧，这两个值相等的时候，就是写入和刷盘指针是一致的
     private volatile long storeTimestamp = 0;
 
     public MappedFileQueue(final String storePath, int mappedFileSize,
@@ -74,6 +84,9 @@ public class MappedFileQueue {
         }
     }
 
+    //根据消息存储时间戳来查找 MappdFile 。 从 MappedFile 列表中第一个文件开始查找，
+    //找到第一个最后一次更新时间大于待查找时间戳的文件，如果不存在，则返回最后一个
+    //MappedFile 文件
     public MappedFile getMappedFileByTime(final long timestamp) {
         Object[] mfs = this.copyMappedFiles(0);
 
@@ -145,6 +158,7 @@ public class MappedFileQueue {
     }
 
     public boolean load() {
+        //加载 storePath 目录下所有文件并按照文件名 排序
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();
         if (files != null) {
@@ -152,6 +166,7 @@ public class MappedFileQueue {
             Arrays.sort(files);
             for (File file : files) {
 
+                //如果文件大小与配置文件的单个文件大小不一致，将忽略该目录下所有文件，
                 if (file.length() != this.mappedFileSize) {
                     log.warn(file + "\t" + file.length()
                         + " length not matched message store config value, please check it manually");
@@ -161,6 +176,7 @@ public class MappedFileQueue {
                 try {
                     MappedFile mappedFile = new MappedFile(file.getPath(), mappedFileSize);
 
+                    //将 wrotePosition 、 flushedPosition ,committedPosition 三个指针都设置为文件大小
                     mappedFile.setWrotePosition(this.mappedFileSize);
                     mappedFile.setFlushedPosition(this.mappedFileSize);
                     mappedFile.setCommittedPosition(this.mappedFileSize);
@@ -191,24 +207,30 @@ public class MappedFileQueue {
         return 0;
     }
 
+    //needCreate 为 true 创建 MappedFile 返回
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
         long createOffset = -1;
         MappedFile mappedFileLast = getLastMappedFile();
 
+        //没有文件，计算开始偏移
         if (mappedFileLast == null) {
             createOffset = startOffset - (startOffset % this.mappedFileSize);
         }
 
+        //文件满了，计算下一个文件开始偏移
         if (mappedFileLast != null && mappedFileLast.isFull()) {
             createOffset = mappedFileLast.getFileFromOffset() + this.mappedFileSize;
         }
 
         if (createOffset != -1 && needCreate) {
+            //当前文件名
             String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);
+            //当前文件名下一个文件名
             String nextNextFilePath = this.storePath + File.separator
                 + UtilAll.offset2FileName(createOffset + this.mappedFileSize);
             MappedFile mappedFile = null;
 
+            //创建 mappedFile
             if (this.allocateMappedFileService != null) {
                 mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
                     nextNextFilePath, this.mappedFileSize);
@@ -224,6 +246,7 @@ public class MappedFileQueue {
                 if (this.mappedFiles.isEmpty()) {
                     mappedFile.setFirstCreateInQueue(true);
                 }
+                //加进
                 this.mappedFiles.add(mappedFile);
             }
 
@@ -285,6 +308,7 @@ public class MappedFileQueue {
         return true;
     }
 
+    //获取存储文件最小偏移量
     public long getMinOffset() {
 
         if (!this.mappedFiles.isEmpty()) {
@@ -299,6 +323,7 @@ public class MappedFileQueue {
         return -1;
     }
 
+    //获取存储文件的最大偏移量
     public long getMaxOffset() {
         MappedFile mappedFile = getLastMappedFile();
         if (mappedFile != null) {
@@ -307,6 +332,7 @@ public class MappedFileQueue {
         return 0;
     }
 
+    //返回存储文件当前的写指针 。 返回最后一个文件的 fileFromOffset 加上当前写指针位置。
     public long getMaxWrotePosition() {
         MappedFile mappedFile = getLastMappedFile();
         if (mappedFile != null) {
@@ -333,6 +359,11 @@ public class MappedFileQueue {
         }
     }
 
+    //执行文件销毁与删除 。 从倒数第二个文件开始遍历，计算文件的最大存活时间 （ ＝ 文件
+    //的最后一次更新时间＋文件存活时间（默认 72 小时）） ， 如果当前时间大于文件的最大存活
+    // 时间或需要强制删除文件（当磁盘使用超过设定的阔值）时则执行 MappedFi Je#destory 方
+    //法，清除 MappedFile 占有的相关资源，如果执行成功，将该文件加入到待删除文件列表
+    //中，然后统一执行 File#delete 方法将文件从物理磁盘中删除 。
     public int deleteExpiredFileByTime(final long expiredTime,
         final int deleteFilesInterval,
         final long intervalForcibly,
@@ -427,7 +458,9 @@ public class MappedFileQueue {
         MappedFile mappedFile = this.findMappedFileByOffset(this.flushedWhere, this.flushedWhere == 0);
         if (mappedFile != null) {
             long tmpTimeStamp = mappedFile.getStoreTimestamp();
+            //刷盘，返回刷盘的数据长度
             int offset = mappedFile.flush(flushLeastPages);
+            //记录当前刷盘后的物理偏移
             long where = mappedFile.getFileFromOffset() + offset;
             result = where == this.flushedWhere;
             this.flushedWhere = where;
@@ -454,6 +487,7 @@ public class MappedFileQueue {
 
     /**
      * Finds a mapped file by offset.
+     * 根据消息偏移量 offset 查找 MappedFile
      *
      * @param offset Offset.
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.

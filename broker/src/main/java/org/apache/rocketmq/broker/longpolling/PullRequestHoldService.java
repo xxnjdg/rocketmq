@@ -94,6 +94,8 @@ public class PullRequestHoldService extends ServiceThread {
     }
 
     private void checkHoldRequest() {
+        //遍历拉取任务表，根据主题与队列获取消息消费队列最大偏移量，如果该偏移量大于
+        //待拉取偏移量， 说明有新的消息到达，调用 notifyMessageArriving 触发消息拉取
         for (String key : this.pullRequestTable.keySet()) {
             String[] kArray = key.split(TOPIC_QUEUEID_SEPARATOR);
             if (2 == kArray.length) {
@@ -115,6 +117,7 @@ public class PullRequestHoldService extends ServiceThread {
 
     public void notifyMessageArriving(final String topic, final int queueId, final long maxOffset, final Long tagsCode,
         long msgStoreTime, byte[] filterBitMap, Map<String, String> properties) {
+        //首先从 ManyPullRequest 中 获取当前该主题、队列所有的挂起拉取任务
         String key = this.buildKey(topic, queueId);
         ManyPullRequest mpr = this.pullRequestTable.get(key);
         if (mpr != null) {
@@ -122,12 +125,15 @@ public class PullRequestHoldService extends ServiceThread {
             if (requestList != null) {
                 List<PullRequest> replayList = new ArrayList<PullRequest>();
 
+                //遍历
                 for (PullRequest request : requestList) {
                     long newestOffset = maxOffset;
                     if (newestOffset <= request.getPullFromThisOffset()) {
                         newestOffset = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId);
                     }
 
+                    //如果消息队列的最大偏移量大于待拉取偏移量 ，如果消息匹配则调用 executeRequestWhenWakeup
+                    // 将消息返回给消息拉取客户端，否则等待下一次尝试
                     if (newestOffset > request.getPullFromThisOffset()) {
                         boolean match = request.getMessageFilter().isMatchedByConsumeQueue(tagsCode,
                             new ConsumeQueueExt.CqExtUnit(tagsCode, msgStoreTime, filterBitMap));
@@ -147,6 +153,7 @@ public class PullRequestHoldService extends ServiceThread {
                         }
                     }
 
+                    //如果挂起超时时间超时 ， 则 不继续等待将直接返回客户消息未找到
                     if (System.currentTimeMillis() >= (request.getSuspendTimestamp() + request.getTimeoutMillis())) {
                         try {
                             this.brokerController.getPullMessageProcessor().executeRequestWhenWakeup(request.getClientChannel(),

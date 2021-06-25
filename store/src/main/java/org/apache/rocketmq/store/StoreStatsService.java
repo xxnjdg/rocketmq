@@ -43,8 +43,10 @@ public class StoreStatsService extends ServiceThread {
 
     private final AtomicLong putMessageFailedTimes = new AtomicLong(0);
 
+    //key = topic value = 写入次数
     private final ConcurrentMap<String, AtomicLong> putMessageTopicTimesTotal =
         new ConcurrentHashMap<String, AtomicLong>(128);
+    //key = topic value = 写入数据长度
     private final ConcurrentMap<String, AtomicLong> putMessageTopicSizeTotal =
         new ConcurrentHashMap<String, AtomicLong>(128);
 
@@ -449,6 +451,7 @@ public class StoreStatsService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
+                //等待1秒
                 this.waitForRunning(FREQUENCY_OF_SAMPLING);
 
                 this.sampling();
@@ -499,9 +502,11 @@ public class StoreStatsService extends ServiceThread {
     }
 
     private void printTps() {
+        //60秒后打印
         if (System.currentTimeMillis() > (this.lastPrintTimestamp + printTPSInterval * 1000)) {
             this.lastPrintTimestamp = System.currentTimeMillis();
 
+            //打印 tps
             log.info("[STORETPS] put_tps {} get_found_tps {} get_miss_tps {} get_transfered_tps {}",
                 this.getPutTps(printTPSInterval),
                 this.getGetFoundTps(printTPSInterval),

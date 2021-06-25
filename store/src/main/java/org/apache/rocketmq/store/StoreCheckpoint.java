@@ -32,9 +32,14 @@ public class StoreCheckpoint {
     private final RandomAccessFile randomAccessFile;
     private final FileChannel fileChannel;
     private final MappedByteBuffer mappedByteBuffer;
+    //commitlog 文件刷盘时间点，这个值是 FlushConsumeQueueService 线程每隔10秒刷新一次
     private volatile long physicMsgTimestamp = 0;
+    //消息消费队列文件写入时间点，只要 comsumeQueue 写入数据就会更新这个值，不用等到刷盘才更新，
+    // FlushConsumeQueueService线程每60秒持久化 StoreCheckpoint 文件
     private volatile long logicsMsgTimestamp = 0;
+    //索引文件刷盘时间点，只有index文件写满了，会更新这个值，并把index文件刷盘，最后再把 StoreCheckpoint 文件持久化
     private volatile long indexMsgTimestamp = 0;
+    //physicMsgTimestamp logicsMsgTimestamp indexMsgTimestamp 这3个值都是唯一的，所以3个值会一样的，一样就证明此时同步
 
     public StoreCheckpoint(final String scpPath) throws IOException {
         File file = new File(scpPath);

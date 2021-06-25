@@ -183,12 +183,17 @@ public class MQClientAPIImpl {
     public MQClientAPIImpl(final NettyClientConfig nettyClientConfig,
         final ClientRemotingProcessor clientRemotingProcessor,
         RPCHook rpcHook, final ClientConfig clientConfig) {
+        //核心的配置
         this.clientConfig = clientConfig;
+        //该功能主要是如果namesrv为空，从约定的服务上去拉取
         topAddressing = new TopAddressing(MixAll.getWSAddr(), clientConfig.getUnitName());
+        //通信客户端的核心实现，底层基于netty的链接
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, null);
+        //请求事件封装处理
         this.clientRemotingProcessor = clientRemotingProcessor;
 
         this.remotingClient.registerRPCHook(rpcHook);
+        //将事件处理绑定到上层传递过来的事件处理封装类上
         this.remotingClient.registerProcessor(RequestCode.CHECK_TRANSACTION_STATE, this.clientRemotingProcessor, null);
 
         this.remotingClient.registerProcessor(RequestCode.NOTIFY_CONSUMER_IDS_CHANGED, this.clientRemotingProcessor, null);
@@ -449,6 +454,7 @@ public class MQClientAPIImpl {
         RemotingCommand request = null;
         String msgType = msg.getProperty(MessageConst.PROPERTY_MESSAGE_TYPE);
         boolean isReply = msgType != null && msgType.equals(MixAll.REPLY_MESSAGE_FLAG);
+        //协议转换
         if (isReply) {
             if (sendSmartMsg) {
                 SendMessageRequestHeaderV2 requestHeaderV2 = SendMessageRequestHeaderV2.createSendMessageRequestHeaderV2(requestHeader);
@@ -500,8 +506,10 @@ public class MQClientAPIImpl {
         final long timeoutMillis,
         final RemotingCommand request
     ) throws RemotingException, MQBrokerException, InterruptedException {
+        //同步发送消息
         RemotingCommand response = this.remotingClient.invokeSync(addr, request, timeoutMillis);
         assert response != null;
+        //处理请求的相应结果
         return this.processSendResponse(brokerName, msg, response,addr);
     }
 
@@ -711,8 +719,10 @@ public class MQClientAPIImpl {
         final CommunicationMode communicationMode,
         final PullCallback pullCallback
     ) throws RemotingException, MQBrokerException, InterruptedException {
+        //拉取的请求协议转换
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.PULL_MESSAGE, requestHeader);
 
+        //拉取的模式
         switch (communicationMode) {
             case ONEWAY:
                 assert false;
@@ -775,6 +785,8 @@ public class MQClientAPIImpl {
     private PullResult processPullResponse(
         final RemotingCommand response,
         final String addr) throws MQBrokerException, RemotingCommandException {
+        //根据响应结果解码成 PullResultExt 对象，此时只 是从网络中读取消息列 表 到
+        //byte[] messageBinary 属性
         PullStatus pullStatus = PullStatus.NO_NEW_MSG;
         switch (response.getCode()) {
             case ResponseCode.SUCCESS:
@@ -1355,6 +1367,7 @@ public class MQClientAPIImpl {
         return getTopicRouteInfoFromNameServer(topic, timeoutMillis, true);
     }
 
+    //从 nameser 获取 topic 路由信息
     public TopicRouteData getTopicRouteInfoFromNameServer(final String topic, final long timeoutMillis,
         boolean allowTopicNotExist) throws MQClientException, InterruptedException, RemotingTimeoutException, RemotingSendRequestException, RemotingConnectException {
         GetRouteInfoRequestHeader requestHeader = new GetRouteInfoRequestHeader();

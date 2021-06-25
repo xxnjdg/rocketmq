@@ -34,9 +34,12 @@ import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 
 public class ConsumerGroupInfo {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
+    //组名
     private final String groupName;
+    //topic
     private final ConcurrentMap<String/* Topic */, SubscriptionData> subscriptionTable =
         new ConcurrentHashMap<String, SubscriptionData>();
+    //channel ClientChannelInfo
     private final ConcurrentMap<Channel, ClientChannelInfo> channelInfoTable =
         new ConcurrentHashMap<Channel, ClientChannelInfo>(16);
     private volatile ConsumeType consumeType;
@@ -122,6 +125,7 @@ public class ConsumerGroupInfo {
 
         ClientChannelInfo infoOld = this.channelInfoTable.get(infoNew.getChannel());
         if (null == infoOld) {
+            //存入缓存
             ClientChannelInfo prev = this.channelInfoTable.put(infoNew.getChannel(), infoNew);
             if (null == prev) {
                 log.info("new consumer connected, group: {} {} {} channel: {}", this.groupName, consumeType,
@@ -140,6 +144,7 @@ public class ConsumerGroupInfo {
             }
         }
 
+        //更新时间戳
         this.lastUpdateTimestamp = System.currentTimeMillis();
         infoOld.setLastUpdateTimestamp(this.lastUpdateTimestamp);
 

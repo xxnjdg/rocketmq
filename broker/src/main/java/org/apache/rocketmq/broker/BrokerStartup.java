@@ -49,8 +49,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.apache.rocketmq.remoting.netty.TlsSystemConfig.TLS_ENABLE;
 
 public class BrokerStartup {
+    //配置文件 properties
     public static Properties properties = null;
     public static CommandLine commandLine = null;
+    //配置文件
     public static String configFile = null;
     public static InternalLogger log;
 
@@ -107,6 +109,7 @@ public class BrokerStartup {
                 System.exit(-1);
             }
 
+            //创建各种配置
             final BrokerConfig brokerConfig = new BrokerConfig();
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
@@ -121,15 +124,20 @@ public class BrokerStartup {
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
             }
 
+            //解析命令行 c 选项
             if (commandLine.hasOption('c')) {
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
+                    //配置文件
                     configFile = file;
                     InputStream in = new BufferedInputStream(new FileInputStream(file));
                     properties = new Properties();
+                    //加载配置文件属性
                     properties.load(in);
 
                     properties2SystemEnv(properties);
+                    //把 properties 的值重新设置到 brokerConfig nettyServerConfig
+                    // nettyClientConfig messageStoreConfig 配置中
                     MixAll.properties2Object(properties, brokerConfig);
                     MixAll.properties2Object(properties, nettyServerConfig);
                     MixAll.properties2Object(properties, nettyClientConfig);
@@ -142,11 +150,13 @@ public class BrokerStartup {
 
             MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), brokerConfig);
 
+            //检查环境变量 ROCKETMQ_HOME 有没有设置
             if (null == brokerConfig.getRocketmqHome()) {
                 System.out.printf("Please set the %s variable in your environment to match the location of the RocketMQ installation", MixAll.ROCKETMQ_HOME_ENV);
                 System.exit(-2);
             }
 
+            //检查 namesrvAddr 是否设置正确
             String namesrvAddr = brokerConfig.getNamesrvAddr();
             if (null != namesrvAddr) {
                 try {
@@ -178,6 +188,7 @@ public class BrokerStartup {
                     break;
             }
 
+            //如果开启了 DLeger 了，BrokerId 设置 -1
             if (messageStoreConfig.isEnableDLegerCommitLog()) {
                 brokerConfig.setBrokerId(-1);
             }
@@ -190,6 +201,7 @@ public class BrokerStartup {
             configurator.doConfigure(brokerConfig.getRocketmqHome() + "/conf/logback_broker.xml");
 
             if (commandLine.hasOption('p')) {
+                //打印所有配置
                 InternalLogger console = InternalLoggerFactory.getLogger(LoggerName.BROKER_CONSOLE_NAME);
                 MixAll.printObjectProperties(console, brokerConfig);
                 MixAll.printObjectProperties(console, nettyServerConfig);
@@ -197,6 +209,7 @@ public class BrokerStartup {
                 MixAll.printObjectProperties(console, messageStoreConfig);
                 System.exit(0);
             } else if (commandLine.hasOption('m')) {
+                //打印所有重要配置
                 InternalLogger console = InternalLoggerFactory.getLogger(LoggerName.BROKER_CONSOLE_NAME);
                 MixAll.printObjectProperties(console, brokerConfig, true);
                 MixAll.printObjectProperties(console, nettyServerConfig, true);
@@ -205,12 +218,14 @@ public class BrokerStartup {
                 System.exit(0);
             }
 
+            //打印所有配置
             log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
             MixAll.printObjectProperties(log, brokerConfig);
             MixAll.printObjectProperties(log, nettyServerConfig);
             MixAll.printObjectProperties(log, nettyClientConfig);
             MixAll.printObjectProperties(log, messageStoreConfig);
 
+            //构造 BrokerController
             final BrokerController controller = new BrokerController(
                 brokerConfig,
                 nettyServerConfig,

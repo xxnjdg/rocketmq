@@ -141,24 +141,27 @@ public class PullAPIWrapper {
     }
 
     public PullResult pullKernelImpl(
-        final MessageQueue mq,
-        final String subExpression,
-        final String expressionType,
+        final MessageQueue mq,//从哪个消息消费队列拉取消息
+        final String subExpression,//消息过滤表达式
+        final String expressionType,//消息表达式类型，分为 TAG 、 SQL92
         final long subVersion,
-        final long offset,
-        final int maxNums,
-        final int sysFlag,
-        final long commitOffset,
-        final long brokerSuspendMaxTimeMillis,
-        final long timeoutMillis,
-        final CommunicationMode communicationMode,
-        final PullCallback pullCallback
+        final long offset,//消息拉取偏移量
+        final int maxNums,//本次拉取最大消息条数，默认 32 条
+        final int sysFlag,//拉取系统标记
+        final long commitOffset,//当前 M巳ssageQueue 的消费进度（内存中）
+        final long brokerSuspendMaxTimeMillis,//消息拉取过程中允许 Broker 挂起时间，默认15s
+        final long timeoutMillis,//消息拉取超时时间，默认30s
+        final CommunicationMode communicationMode,//消息拉取模式，默认为异步拉取
+        final PullCallback pullCallback//从 Broker 拉取到消息后的回调方法
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //获得broker信息
         FindBrokerResult findBrokerResult =
             this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
                 this.recalculatePullFromWhichNode(mq), false);
         if (null == findBrokerResult) {
+            //同步远端的namesrv的路由信息，更新同步到当前服务器
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());
+            //获得当前broker信息
             findBrokerResult =
                 this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
                     this.recalculatePullFromWhichNode(mq), false);
@@ -179,6 +182,7 @@ public class PullAPIWrapper {
                 sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);
             }
 
+            //封装拉取信息的请求头
             PullMessageRequestHeader requestHeader = new PullMessageRequestHeader();
             requestHeader.setConsumerGroup(this.consumerGroup);
             requestHeader.setTopic(mq.getTopic());
@@ -192,11 +196,14 @@ public class PullAPIWrapper {
             requestHeader.setSubVersion(subVersion);
             requestHeader.setExpressionType(expressionType);
 
+            //如果消息 过 滤模式为类过滤， 则 需要根据主题名称、 broker 地址找到 注册在
+            //Broke r 上的 F ilterS erver 地址，从 F ilterServer 上拉取消息，否则从 Broker 上拉取消息
             String brokerAddr = findBrokerResult.getBrokerAddr();
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computePullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
 
+            //拉取信息
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(
                 brokerAddr,
                 requestHeader,

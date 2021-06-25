@@ -26,8 +26,12 @@ import org.apache.rocketmq.logging.InternalLogger;
 
 public class StatsItem {
 
+    //TOPIC_PUT_NUMS = 写入数据次数
+    //TOPIC_PUT_SIZE = 写入数据长度
+    //BROKER_PUT_NUMS = 写入数据次数
     private final AtomicLong value = new AtomicLong(0);
 
+    //写入数据时间
     private final AtomicLong times = new AtomicLong(0);
 
     private final LinkedList<CallSnapshot> csListMinute = new LinkedList<CallSnapshot>();
@@ -37,6 +41,8 @@ public class StatsItem {
     private final LinkedList<CallSnapshot> csListDay = new LinkedList<CallSnapshot>();
 
     private final String statsName;
+    //topic
+    //集群名
     private final String statsKey;
     private final ScheduledExecutorService scheduledExecutorService;
     private final InternalLogger log;

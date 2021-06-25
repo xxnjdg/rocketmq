@@ -111,21 +111,22 @@ public class BrokerOuterAPI {
     }
 
     public List<RegisterBrokerResult> registerBrokerAll(
-        final String clusterName,
-        final String brokerAddr,
-        final String brokerName,
-        final long brokerId,
+        final String clusterName,//集群名字
+        final String brokerAddr,//地址
+        final String brokerName,//名字
+        final long brokerId,//id
         final String haServerAddr,
         final TopicConfigSerializeWrapper topicConfigWrapper,
         final List<String> filterServerList,
-        final boolean oneway,
-        final int timeoutMills,
-        final boolean compressed) {
+        final boolean oneway,//是否 oneway
+        final int timeoutMills,//超时时间
+        final boolean compressed) { //是否压缩
 
         final List<RegisterBrokerResult> registerBrokerResultList = new CopyOnWriteArrayList<>();
         List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
 
+            //封装 RegisterBrokerRequestHeader
             final RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
             requestHeader.setBrokerAddr(brokerAddr);
             requestHeader.setBrokerId(brokerId);
@@ -137,11 +138,15 @@ public class BrokerOuterAPI {
             RegisterBrokerBody requestBody = new RegisterBrokerBody();
             requestBody.setTopicConfigSerializeWrapper(topicConfigWrapper);
             requestBody.setFilterServerList(filterServerList);
+            // 处理 requestBody，compressed为true进行压缩，fasle,直接用fastJson序列化String转成字节数组
             final byte[] body = requestBody.encode(compressed);
+            //CRC 校验
             final int bodyCrc32 = UtilAll.crc32(body);
             requestHeader.setBodyCrc32(bodyCrc32);
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
+            //遍历 namesrvAddr
             for (final String namesrvAddr : nameServerAddressList) {
+                //放入线程执行
                 brokerOuterExecutor.execute(new Runnable() {
                     @Override
                     public void run() {
@@ -162,6 +167,7 @@ public class BrokerOuterAPI {
             }
 
             try {
+                //同步等待
                 countDownLatch.await(timeoutMills, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
             }
@@ -178,6 +184,7 @@ public class BrokerOuterAPI {
         final byte[] body
     ) throws RemotingCommandException, MQBrokerException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
         InterruptedException {
+        //创建 RemotingCommand
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.REGISTER_BROKER, requestHeader);
         request.setBody(body);
 
@@ -193,6 +200,7 @@ public class BrokerOuterAPI {
         RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMills);
         assert response != null;
         switch (response.getCode()) {
+            //成功会进入这个 case
             case ResponseCode.SUCCESS: {
                 RegisterBrokerResponseHeader responseHeader =
                     (RegisterBrokerResponseHeader) response.decodeCommandCustomHeader(RegisterBrokerResponseHeader.class);

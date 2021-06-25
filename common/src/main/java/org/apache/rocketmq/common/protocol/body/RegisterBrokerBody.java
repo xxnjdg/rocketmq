@@ -44,11 +44,15 @@ public class RegisterBrokerBody extends RemotingSerializable {
     private TopicConfigSerializeWrapper topicConfigSerializeWrapper = new TopicConfigSerializeWrapper();
     private List<String> filterServerList = new ArrayList<String>();
 
+    //序列化
     public byte[] encode(boolean compress) {
 
+        //是否压缩，如果不压缩
         if (!compress) {
+            //fastjson 序列化
             return super.encode();
         }
+        //下面逻辑都是压缩逻辑
         long start = System.currentTimeMillis();
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         DeflaterOutputStream outputStream = new DeflaterOutputStream(byteArrayOutputStream, new Deflater(Deflater.BEST_COMPRESSION));
@@ -56,6 +60,7 @@ public class RegisterBrokerBody extends RemotingSerializable {
         ConcurrentMap<String, TopicConfig> topicConfigTable = cloneTopicConfigTable(topicConfigSerializeWrapper.getTopicConfigTable());
         assert topicConfigTable != null;
         try {
+            //fastJson 序列化String 转成 字节数组
             byte[] buffer = dataVersion.encode();
 
             // write data version
@@ -69,6 +74,7 @@ public class RegisterBrokerBody extends RemotingSerializable {
 
             // write topic config entry one by one.
             for (ConcurrentMap.Entry<String, TopicConfig> next : topicConfigTable.entrySet()) {
+                // 写入 topic config 项
                 buffer = next.getValue().encode().getBytes(MixAll.DEFAULT_CHARSET);
                 outputStream.write(convertIntToByteArray(buffer.length));
                 outputStream.write(buffer);

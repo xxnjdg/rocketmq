@@ -29,19 +29,24 @@ public class MessageExt extends Message {
 
     private String brokerName;
 
+    //队列id
     private int queueId;
 
     private int storeSize;
 
     private long queueOffset;
     private int sysFlag;
+    //客户端message创建时间
     private long bornTimestamp;
     private SocketAddress bornHost;
 
+    //设置 commitLog 开始处理时间
     private long storeTimestamp;
+    //broker ip 地址
     private SocketAddress storeHost;
     private String msgId;
     private long commitLogOffset;
+    //crc
     private int bodyCRC;
     private int reconsumeTimes;
 

@@ -155,9 +155,11 @@ public abstract class NettyRemotingAbstract {
         if (cmd != null) {
             switch (cmd.getType()) {
                 case REQUEST_COMMAND:
+                    //处理请求类的操作
                     processRequestCommand(ctx, cmd);
                     break;
                 case RESPONSE_COMMAND:
+                    //处理响应类的操作
                     processResponseCommand(ctx, cmd);
                     break;
                 default:
@@ -190,25 +192,34 @@ public abstract class NettyRemotingAbstract {
      * @param cmd request command.
      */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
+        //获得对应的事件处理对象
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
+        //健全的配置事件处理
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
+        //消息唯一标示
         final int opaque = cmd.getOpaque();
 
         if (pair != null) {
+            //构建异步线程操作
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
                     try {
+                        //前置处理
                         doBeforeRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
+                        //执行对应的事件处理
                         final RemotingResponseCallback callback = new RemotingResponseCallback() {
                             @Override
                             public void callback(RemotingCommand response) {
+                                //后置处理
                                 doAfterRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
+                                //如果不是单发需要返回对应的请求唯一标识和数据
                                 if (!cmd.isOnewayRPC()) {
                                     if (response != null) {
                                         response.setOpaque(opaque);
                                         response.markResponseType();
                                         try {
+                                            //将结果数据会写给netty的channel
                                             ctx.writeAndFlush(response);
                                         } catch (Throwable e) {
                                             log.error("process request over, but response failed", e);
@@ -242,6 +253,7 @@ public abstract class NettyRemotingAbstract {
                 }
             };
 
+            //验证请求处理类型
             if (pair.getObject1().rejectRequest()) {
                 final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY,
                     "[REJECTREQUEST]system busy, start flow control for a while");
@@ -250,6 +262,7 @@ public abstract class NettyRemotingAbstract {
                 return;
             }
 
+            //封装异步处理线程，同时根据配置的事件线程池执行事件异步线程，
             try {
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
                 pair.getObject2().submit(requestTask);
@@ -410,12 +423,16 @@ public abstract class NettyRemotingAbstract {
         final int opaque = request.getOpaque();
 
         try {
+            //异步调用封装，处理netty通信后的结果
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis, null, null);
+            //结果的并发处理及通知，及后续的异常处理收集
             this.responseTable.put(opaque, responseFuture);
             final SocketAddress addr = channel.remoteAddress();
+            //netty的消息发送，只负责发送
             channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture f) throws Exception {
+                    //操作成功后马上返回
                     if (f.isSuccess()) {
                         responseFuture.setSendRequestOK(true);
                         return;
@@ -423,6 +440,7 @@ public abstract class NettyRemotingAbstract {
                         responseFuture.setSendRequestOK(false);
                     }
 
+                    //同步处理后删除对应的请求对象
                     responseTable.remove(opaque);
                     responseFuture.setCause(f.cause());
                     responseFuture.putResponse(null);
@@ -430,8 +448,11 @@ public abstract class NettyRemotingAbstract {
                 }
             });
 
+            //相应结果的处理，实际的操作在NettyClientHandler中实现，根据opaque来更新结果
+            //成功 RemotingCommand 不会为空
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
             if (null == responseCommand) {
+                //超时了
                 if (responseFuture.isSendRequestOK()) {
                     throw new RemotingTimeoutException(RemotingHelper.parseSocketAddressAddr(addr), timeoutMillis,
                         responseFuture.getCause());

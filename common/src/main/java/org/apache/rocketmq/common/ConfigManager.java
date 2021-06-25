@@ -29,12 +29,16 @@ public abstract class ConfigManager {
     public boolean load() {
         String fileName = null;
         try {
+            //获取文件名
             fileName = this.configFilePath();
+            //读取文件内容
             String jsonString = MixAll.file2String(fileName);
 
             if (null == jsonString || jsonString.length() == 0) {
+                //如果文件为空，读取 文件.bak
                 return this.loadBak();
             } else {
+                //文件内容解码
                 this.decode(jsonString);
                 log.info("load " + fileName + " OK");
                 return true;
@@ -51,8 +55,10 @@ public abstract class ConfigManager {
         String fileName = null;
         try {
             fileName = this.configFilePath();
+            //读取 文件名 + .bak
             String jsonString = MixAll.file2String(fileName + ".bak");
             if (jsonString != null && jsonString.length() > 0) {
+                //解码
                 this.decode(jsonString);
                 log.info("load " + fileName + " OK");
                 return true;
@@ -68,10 +74,12 @@ public abstract class ConfigManager {
     public abstract void decode(final String jsonString);
 
     public synchronized void persist() {
+        //编码
         String jsonString = this.encode(true);
         if (jsonString != null) {
             String fileName = this.configFilePath();
             try {
+                //写道文件中
                 MixAll.string2File(jsonString, fileName);
             } catch (IOException e) {
                 log.error("persist file " + fileName + " exception", e);

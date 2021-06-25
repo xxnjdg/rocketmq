@@ -32,7 +32,9 @@ public class Configuration {
 
     private final InternalLogger log;
 
+    //配置类 集合
     private List<Object> configObjectList = new ArrayList<Object>(4);
+    ////配置文件路径
     private String storePath;
     private boolean storePathFromConfig = false;
     private Object storePathObject;
@@ -41,6 +43,7 @@ public class Configuration {
     private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
     /**
      * All properties include configs in object and extend properties.
+     * 所有配置类合并后的属性
      */
     private Properties allConfigs = new Properties();
 

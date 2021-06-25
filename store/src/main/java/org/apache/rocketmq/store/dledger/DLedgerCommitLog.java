@@ -82,6 +82,7 @@ public class DLedgerCommitLog extends CommitLog {
 
     public DLedgerCommitLog(final DefaultMessageStore defaultMessageStore) {
         super(defaultMessageStore);
+        //初始化 DLedgerConfig
         dLedgerConfig = new DLedgerConfig();
         dLedgerConfig.setEnableDiskForceClean(defaultMessageStore.getMessageStoreConfig().isCleanFileForciblyEnable());
         dLedgerConfig.setStoreType(DLedgerConfig.FILE);
@@ -96,6 +97,7 @@ public class DLedgerCommitLog extends CommitLog {
         dLedgerConfig.setEnableBatchPush(defaultMessageStore.getMessageStoreConfig().isEnableBatchPush());
 
         id = Integer.valueOf(dLedgerConfig.getSelfId().substring(1)) + 1;
+        //创建 DLedgerServer
         dLedgerServer = new DLedgerServer(dLedgerConfig);
         dLedgerFileStore = (DLedgerMmapFileStore) dLedgerServer.getdLedgerStore();
         DLedgerMmapFileStore.AppendHook appendHook = (entry, buffer, bodyOffset) -> {

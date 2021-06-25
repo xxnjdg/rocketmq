@@ -65,12 +65,17 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 public class NettyRemotingServer extends NettyRemotingAbstract implements RemotingServer {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
+    //netty的启动核心入口
     private final ServerBootstrap serverBootstrap;
+    //netty的入口连接池
     private final EventLoopGroup eventLoopGroupSelector;
+    //netty的handler的连接池
     private final EventLoopGroup eventLoopGroupBoss;
     private final NettyServerConfig nettyServerConfig;
 
+    //操作处理的线程池
     private final ExecutorService publicExecutor;
+    //处理监听的回调服务
     private final ChannelEventListener channelEventListener;
 
     private final Timer timer = new Timer("ServerHouseKeepingService", true);
@@ -96,6 +101,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig,
         final ChannelEventListener channelEventListener) {
         super(nettyServerConfig.getServerOnewaySemaphoreValue(), nettyServerConfig.getServerAsyncSemaphoreValue());
+        //初始化netty的核心框架
         this.serverBootstrap = new ServerBootstrap();
         this.nettyServerConfig = nettyServerConfig;
         this.channelEventListener = channelEventListener;
@@ -105,6 +111,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             publicThreadNums = 4;
         }
 
+        //共享线程池的初始化
         this.publicExecutor = Executors.newFixedThreadPool(publicThreadNums, new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
@@ -114,6 +121,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             }
         });
 
+        //获得系统平台是否支持epoll的高性能io操作
         if (useEpoll()) {
             this.eventLoopGroupBoss = new EpollEventLoopGroup(1, new ThreadFactory() {
                 private AtomicInteger threadIndex = new AtomicInteger(0);
@@ -181,6 +189,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+        //默认的事件处理进程组初始化
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
             nettyServerConfig.getServerWorkerThreads(),
             new ThreadFactory() {
@@ -195,35 +204,54 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         prepareSharableHandlers();
 
+        //netty的服务端启动配置
         ServerBootstrap childHandler =
+                //netty中服务端的标准设置，一个boss，多个worker
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)
+                    //采用的nio模型
                 .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
+                    //socket参数，服务端接受链接的队列长度，如果队列已满则拒绝，默认值较小 win200 ，它128
                 .option(ChannelOption.SO_BACKLOG, 1024)
+                    //socket参数，地址复用，默认true，快速启动的操作更优
                 .option(ChannelOption.SO_REUSEADDR, true)
+                    //socket参数，连接保持，默认false，tcp会主动探测连接的有效性，可理解为心跳
                 .option(ChannelOption.SO_KEEPALIVE, false)
+                    //tcp参数，立即发送数据，netty默认true，系统默认false，如果选择带宽的性能可以设置为false，一次发送多个数据款
                 .childOption(ChannelOption.TCP_NODELAY, true)
+                    //socket参数，tcp数据发送缓冲区
                 .childOption(ChannelOption.SO_SNDBUF, nettyServerConfig.getServerSocketSndBufSize())
+                    //socket参数，tcp数据接收缓冲区
                 .childOption(ChannelOption.SO_RCVBUF, nettyServerConfig.getServerSocketRcvBufSize())
+                    //绑定当前服务器及端口
                 .localAddress(new InetSocketAddress(this.nettyServerConfig.getListenPort()))
+                    //设置handler
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline()
+                                //增加业务需要的handler
                             .addLast(defaultEventExecutorGroup, HANDSHAKE_HANDLER_NAME, handshakeHandler)
                             .addLast(defaultEventExecutorGroup,
+                                    //编码
                                 encoder,
+                                    //解码
                                 new NettyDecoder(),
+                                    //idle
                                 new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
+                                    //连接管理
                                 connectionManageHandler,
+                                    //业务核心处理
                                 serverHandler
                             );
                     }
                 });
 
+        //buf的分配器设置
         if (nettyServerConfig.isServerPooledByteBufAllocatorEnable()) {
             childHandler.childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
         }
 
+        //启动当前的服务
         try {
             ChannelFuture sync = this.serverBootstrap.bind().sync();
             InetSocketAddress addr = (InetSocketAddress) sync.channel().localAddress();
@@ -232,10 +260,12 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             throw new RuntimeException("this.serverBootstrap.bind().sync() InterruptedException", e1);
         }
 
+        //namesrv端的事件回调处理机制，会调用channelEventListener的事件处理
         if (this.channelEventListener != null) {
             this.nettyEventExecutor.start();
         }
 
+        //执行响应数据的处理
         this.timer.scheduleAtFixedRate(new TimerTask() {
 
             @Override
@@ -415,6 +445,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     @ChannelHandler.Sharable
     class NettyServerHandler extends SimpleChannelInboundHandler<RemotingCommand> {
 
+        //读取网络请求
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
             processMessageReceived(ctx, msg);

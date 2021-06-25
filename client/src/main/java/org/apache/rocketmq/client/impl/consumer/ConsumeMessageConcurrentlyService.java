@@ -51,14 +51,21 @@ import org.apache.rocketmq.remoting.common.RemotingHelper;
 
 public class ConsumeMessageConcurrentlyService implements ConsumeMessageService {
     private static final InternalLogger log = ClientLogger.getLog();
+    //消息的实际拉取操作
     private final DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
+    //消费消息的顶层结构
     private final DefaultMQPushConsumer defaultMQPushConsumer;
+    //并行消息接听
     private final MessageListenerConcurrently messageListener;
     private final BlockingQueue<Runnable> consumeRequestQueue;
+    //线程池执行配置
     private final ThreadPoolExecutor consumeExecutor;
+    //消费者组
     private final String consumerGroup;
 
+    //任务调用
     private final ScheduledExecutorService scheduledExecutorService;
+    //任务调度清除超时
     private final ScheduledExecutorService cleanExpireMsgExecutors;
 
     public ConsumeMessageConcurrentlyService(DefaultMQPushConsumerImpl defaultMQPushConsumerImpl,
@@ -87,6 +94,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
             @Override
             public void run() {
+                //清除超时消息
                 cleanExpireMsg();
             }
 
@@ -263,7 +271,9 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 if (ackIndex >= consumeRequest.getMsgs().size()) {
                     ackIndex = consumeRequest.getMsgs().size() - 1;
                 }
+                //1
                 int ok = ackIndex + 1;
+                //0
                 int failed = consumeRequest.getMsgs().size() - ok;
                 this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), ok);
                 this.getConsumerStatsManager().incConsumeFailedTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), failed);

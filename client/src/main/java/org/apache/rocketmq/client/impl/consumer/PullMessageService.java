@@ -43,6 +43,7 @@ public class PullMessageService extends ServiceThread {
         this.mQClientFactory = mQClientFactory;
     }
 
+    //延迟指定的时间，将请求添加到队列中
     public void executePullRequestLater(final PullRequest pullRequest, final long timeDelay) {
         if (!isStopped()) {
             this.scheduledExecutorService.schedule(new Runnable() {
@@ -56,6 +57,7 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
+    //将请求直接添加到队列中，这里肯定是第一次初始化和后来无限次操作的入口
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.pullRequestQueue.put(pullRequest);
@@ -77,9 +79,11 @@ public class PullMessageService extends ServiceThread {
     }
 
     private void pullMessage(final PullRequest pullRequest) {
+        //选择一个队列处理，基于内存的查询
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
         if (consumer != null) {
             DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;
+            //消息的实际拉取对象处理
             impl.pullMessage(pullRequest);
         } else {
             log.warn("No matched consumer for the PullRequest {}, drop it", pullRequest);
@@ -90,9 +94,12 @@ public class PullMessageService extends ServiceThread {
     public void run() {
         log.info(this.getServiceName() + " service started");
 
+        //消息拉取的持续处理功能，通过队列的添加、获取、处理来拉取消息
         while (!this.isStopped()) {
             try {
+                //从请求队列中获取一个拉取请求
                 PullRequest pullRequest = this.pullRequestQueue.take();
+                //执行消息的拉取
                 this.pullMessage(pullRequest);
             } catch (InterruptedException ignored) {
             } catch (Exception e) {

@@ -47,6 +47,8 @@ public class TopicConfigManager extends ConfigManager {
 
     private transient final Lock lockTopicConfigTable = new ReentrantLock();
 
+    //key = topic 名字
+    //启动时会从加载默认
     private final ConcurrentMap<String, TopicConfig> topicConfigTable =
         new ConcurrentHashMap<String, TopicConfig>(1024);
     private final DataVersion dataVersion = new DataVersion();
@@ -165,6 +167,7 @@ public class TopicConfigManager extends ConfigManager {
                     if (topicConfig != null)
                         return topicConfig;
 
+                    //获取默认topic
                     TopicConfig defaultTopicConfig = this.topicConfigTable.get(defaultTopic);
                     if (defaultTopicConfig != null) {
                         if (defaultTopic.equals(TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC)) {
@@ -173,9 +176,11 @@ public class TopicConfigManager extends ConfigManager {
                             }
                         }
 
+                        //查看权限
                         if (PermName.isInherited(defaultTopicConfig.getPerm())) {
                             topicConfig = new TopicConfig(topic);
 
+                            //队列数量
                             int queueNums =
                                 clientDefaultTopicQueueNums > defaultTopicConfig.getWriteQueueNums() ? defaultTopicConfig
                                     .getWriteQueueNums() : clientDefaultTopicQueueNums;
@@ -184,6 +189,7 @@ public class TopicConfigManager extends ConfigManager {
                                 queueNums = 0;
                             }
 
+                            //设置属性
                             topicConfig.setReadQueueNums(queueNums);
                             topicConfig.setWriteQueueNums(queueNums);
                             int perm = defaultTopicConfig.getPerm();
@@ -204,12 +210,14 @@ public class TopicConfigManager extends ConfigManager {
                         log.info("Create new topic by default topic:[{}] config:[{}] producer:[{}]",
                             defaultTopic, topicConfig, remoteAddress);
 
+                        //更新 topicConfigTable
                         this.topicConfigTable.put(topic, topicConfig);
 
                         this.dataVersion.nextVersion();
 
                         createNew = true;
 
+                        //持久化到文件中
                         this.persist();
                     }
                 } finally {
@@ -221,6 +229,7 @@ public class TopicConfigManager extends ConfigManager {
         }
 
         if (createNew) {
+            //告诉 NameServer,这个 broker topic更新了
             this.brokerController.registerBrokerAll(false, true, true);
         }
 
@@ -245,6 +254,7 @@ public class TopicConfigManager extends ConfigManager {
                     if (topicConfig != null)
                         return topicConfig;
 
+                    //创建 TopicConfig
                     topicConfig = new TopicConfig(topic);
                     topicConfig.setReadQueueNums(clientDefaultTopicQueueNums);
                     topicConfig.setWriteQueueNums(clientDefaultTopicQueueNums);
@@ -252,6 +262,7 @@ public class TopicConfigManager extends ConfigManager {
                     topicConfig.setTopicSysFlag(topicSysFlag);
 
                     log.info("create new topic {}", topicConfig);
+                    //加入缓存中
                     this.topicConfigTable.put(topic, topicConfig);
                     createNew = true;
                     this.dataVersion.nextVersion();
@@ -265,6 +276,7 @@ public class TopicConfigManager extends ConfigManager {
         }
 
         if (createNew) {
+            //上报给 nameServer 有新的topic
             this.brokerController.registerBrokerAll(false, true, true);
         }
 
